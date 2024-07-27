@@ -197,6 +197,7 @@ class BaseSegDataset(BaseDataset):
         """
         palette = self._metainfo.get('palette', [])
         classes = self._metainfo.get('classes', [])
+        # print(len(palette),len(classes))
         # palette does match classes
         if len(palette) == len(classes):
             return palette

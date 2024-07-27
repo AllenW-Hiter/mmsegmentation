@@ -38,7 +38,26 @@ def accuracy(pred, target, topk=1, thresh=None, ignore_index=None):
     assert pred.size(0) == target.size(0)
     assert maxk <= pred.size(1), \
         f'maxk {maxk} exceeds pred dimension {pred.size(1)}'
-    pred_value, pred_label = pred.topk(maxk, dim=1)
+    res = []
+    eps = torch.finfo(torch.float32).eps
+    # 这里官方没有考虑二分类的问题，即只输出一层 mask 这里坐下分类
+    # 如果是二分类问题，即网络输出 C = 1
+    if pred.size(1) == 1:
+        pred_value = pred.sigmoid()
+        pred_label = torch.ones(size=pred.shape,device=pred.device,dtype=torch.int64)*255
+        pred_label[pred>0]=0
+        pred_label =pred_label.squeeze(1)
+        correct = pred_label.eq(target)
+        if ignore_index is not None:
+            correct[target == ignore_index]=False
+            total_num = target[target != ignore_index].numel() + eps
+        else:
+            total_num = target.numel() + eps
+        correct_k=correct.reshape(-1).float().sum(0, keepdim=True) + eps
+        res.append(correct_k.mul_(100.0 / total_num))
+        return res[0] if return_single else res
+    else:
+        pred_value, pred_label = pred.topk(maxk, dim=1)
     # transpose to shape (maxk, N, ...)
     pred_label = pred_label.transpose(0, 1)
     correct = pred_label.eq(target.unsqueeze(0).expand_as(pred_label))
@@ -47,8 +66,6 @@ def accuracy(pred, target, topk=1, thresh=None, ignore_index=None):
         correct = correct & (pred_value > thresh).t()
     if ignore_index is not None:
         correct = correct[:, target != ignore_index]
-    res = []
-    eps = torch.finfo(torch.float32).eps
     for k in topk:
         # Avoid causing ZeroDivisionError when all pixels
         # of an image are ignored
